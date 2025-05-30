@@ -61,28 +61,48 @@ export default function HomePage() {
         const response = await fetchData(year);
         console.log('Resposta da API:', response);
 
+        // Check if response and response.data exist and response.data is an object
         if (response && typeof response.data === 'object' && response.data !== null && !Array.isArray(response.data)) {
-          const receivedData = response.data as ApiData;
           
-          if ('0' in receivedData && Object.keys(receivedData).length === 1 && typeof receivedData['0'] === 'object' && !Array.isArray(receivedData['0'])) {
-             console.warn("Backend retornou dados aninhados sob '0'. Tentando corrigir.");
-             const correctedData = receivedData['0'] as ApiData;
-             setAllData(correctedData);
-             const types = Object.keys(correctedData);
-             setAvailableDataTypes(types);
-             setDataType(types.includes('Comercialização') ? 'Comercialização' : types[0] || '');
-          } else if (Object.keys(receivedData).length > 0) {
-             setAllData(receivedData);
-             const types = Object.keys(receivedData);
-             setAvailableDataTypes(types);
-             setDataType(types.includes('Comercialização') ? 'Comercialização' : types[0] || '');
+          // Access the nested 'data' field provided by the back_git backend
+          const actualDataPayload = response.data.data; 
+
+          // Now, check if actualDataPayload is the expected object structure
+          if (actualDataPayload && typeof actualDataPayload === 'object' && !Array.isArray(actualDataPayload)) {
+            const receivedData = actualDataPayload as ApiData; // Use the nested data
+
+            // Check for the specific nested '0' case (seems like a potential backend issue, but keeping the handling)
+            if ('0' in receivedData && Object.keys(receivedData).length === 1 && typeof receivedData['0'] === 'object' && !Array.isArray(receivedData['0'])) {
+               console.warn("Backend retornou dados aninhados sob '0'. Tentando corrigir.");
+               const correctedData = receivedData['0'] as ApiData;
+               setAllData(correctedData);
+               const types = Object.keys(correctedData);
+               setAvailableDataTypes(types);
+               // Set default dataType, prioritizing 'Comercialização' if available
+               setDataType(types.includes('Comercialização') ? 'Comercialização' : types[0] || ''); 
+            } else if (Object.keys(receivedData).length > 0) {
+               // Standard case: Use the received data directly
+               setAllData(receivedData);
+               const types = Object.keys(receivedData);
+               setAvailableDataTypes(types);
+               // Set default dataType, prioritizing 'Comercialização' if available
+               setDataType(types.includes('Comercialização') ? 'Comercialização' : types[0] || '');
+            } else {
+               // The nested data object is empty
+               setError(`Nenhum dado encontrado para o ano ${year}.`);
+               setAllData({});
+               setAvailableDataTypes([]);
+            }
           } else {
-             setError(`Nenhum dado encontrado para o ano ${year}.`);
-             setAllData({});
-             setAvailableDataTypes([]);
+            // Handle cases where response.data.data is not the expected object
+            console.error('response.data.data da API não é um objeto válido:', actualDataPayload);
+            setError(`Estrutura de dados interna inválida da API para o ano ${year}.`);
+            setAllData({});
+            setAvailableDataTypes([]);
           }
         } else {
-          console.error('response.data da API não é um objeto válido:', response.data);
+          // Handle cases where response.data itself is invalid or missing
+          console.error('response.data da API não é um objeto válido ou não existe:', response?.data);
           setError(`Resposta inválida da API para o ano ${year}.`);
           setAllData({});
           setAvailableDataTypes([]);
