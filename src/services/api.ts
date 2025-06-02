@@ -13,8 +13,8 @@ interface FetchDataSuccessResponse extends AxiosResponse {
 
 export const fetchData = async (year: string): Promise<FetchDataSuccessResponse> => {
   try {
-    const response: AxiosResponse = await axios.get(`https://grapi-backend.onrender.com/extractor?year=${year}`, {
-      timeout: 15000, // Tempo limite de 15 segundos
+    const response: AxiosResponse = await axios.get(`http://127.0.0.1:5000/extractor?year=${year}`, {
+      timeout: 30000, // Tempo limite de 15 segundos
       validateStatus: (status) => status === 200, // Somente status 200 é considerado sucesso
     });
 

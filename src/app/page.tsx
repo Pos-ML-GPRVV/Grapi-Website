@@ -64,60 +64,103 @@ export default function HomePage() {
         // Check if response and response.data exist and response.data is an object
         if (response && typeof response.data === 'object' && response.data !== null && !Array.isArray(response.data)) {
           
-          // Access the nested 'data' field provided by the back_git backend
-          const actualDataPayload = response.data.data; 
+          // --- DYNAMIC PAYLOAD DETECTION ---
+          let dataPayload: ApiData | null = null;
+          let potentialNestedPayload: unknown = response.data.data; // Use unknown for initial check
 
-          // Now, check if actualDataPayload is the expected object structure
-          if (actualDataPayload && typeof actualDataPayload === 'object' && !Array.isArray(actualDataPayload)) {
-            const receivedData = actualDataPayload as ApiData; // Use the nested data
-
-            // Check for the specific nested '0' case (seems like a potential backend issue, but keeping the handling)
-            if ('0' in receivedData && Object.keys(receivedData).length === 1 && typeof receivedData['0'] === 'object' && !Array.isArray(receivedData['0'])) {
-               console.warn("Backend retornou dados aninhados sob '0'. Tentando corrigir.");
-               const correctedData = receivedData['0'] as ApiData;
-               setAllData(correctedData);
-               const types = Object.keys(correctedData);
-               setAvailableDataTypes(types);
-               // Set default dataType, prioritizing 'Comercialização' if available
-               setDataType(types.includes('Comercialização') ? 'Comercialização' : types[0] || ''); 
-            } else if (Object.keys(receivedData).length > 0) {
-               // Standard case: Use the received data directly
-               setAllData(receivedData);
-               const types = Object.keys(receivedData);
-               setAvailableDataTypes(types);
-               // Set default dataType, prioritizing 'Comercialização' if available
-               setDataType(types.includes('Comercialização') ? 'Comercialização' : types[0] || '');
+          // Check if the nested structure exists and is a valid object
+          if (potentialNestedPayload && typeof potentialNestedPayload === 'object' && !Array.isArray(potentialNestedPayload)) {
+            console.log("Detected nested data structure (response.data.data).");
+            // Check if this nested level itself contains a 'data' key and it's an object, indicating deeper nesting
+            if ('data' in potentialNestedPayload && potentialNestedPayload.data && typeof potentialNestedPayload.data === 'object' && !Array.isArray(potentialNestedPayload.data)) {
+                console.log("Detected DEEPER nested structure (response.data.data.data). Using this as payload.");
+                dataPayload = potentialNestedPayload.data as ApiData; // Go one level deeper
             } else {
-               // The nested data object is empty
-               setError(`Nenhum dado encontrado para o ano ${year}.`);
-               setAllData({});
-               setAvailableDataTypes([]);
+                 console.log("Using response.data.data directly as payload (no deeper 'data' object found).");
+                 dataPayload = potentialNestedPayload as ApiData; // Use the current level
             }
           } else {
-            // Handle cases where response.data.data is not the expected object
-            console.error('response.data.data da API não é um objeto válido:', actualDataPayload);
-            setError(`Estrutura de dados interna inválida da API para o ano ${year}.`);
-            setAllData({});
+            // If nested structure is invalid or missing, try the direct structure (local)
+            let potentialDirectPayload: unknown = response.data;
+            if (potentialDirectPayload && typeof potentialDirectPayload === 'object' && !Array.isArray(potentialDirectPayload)) {
+              // Basic check: does it look like our data structure?
+              const keys = Object.keys(potentialDirectPayload);
+              if (keys.includes('Comercialização') || keys.includes('Produção') || keys.includes('Processamento') || keys.includes('Importação') || keys.includes('Exportação')) {
+                 console.log("Detected direct data structure (response.data).");
+                 dataPayload = potentialDirectPayload as ApiData;
+              } else {
+                 console.warn("Direct response.data does not seem to contain expected data types.");
+              }
+            }
+          }
+          // --- END DYNAMIC PAYLOAD DETECTION ---
+
+          // Now, check if we successfully identified a valid dataPayload
+          if (dataPayload && typeof dataPayload === 'object' && !Array.isArray(dataPayload)) {
+            const actualData = dataPayload as ApiData; // Use the identified payload
+
+            // Check for the specific nested '0' case (keeping the handling for now)
+            // IMPORTANT: This '0' check should ideally happen *after* confirming actualData has valid types
+            if ('0' in actualData && Object.keys(actualData).length === 1 && typeof actualData['0'] === 'object' && !Array.isArray(actualData['0'])) {
+               console.warn("Backend retornou dados aninhados sob '0'. Tentando corrigir.");
+               const correctedData = actualData['0'] as ApiData;
+               // Ensure keys are extracted from the *corrected* data here
+               const rawTypes = Object.keys(correctedData);
+               const validTypes = rawTypes.filter(key => key !== 'data'); // Filter out 'data' key
+               console.log("DEBUG: Extracted types (keys) from corrected '0' data:", rawTypes);
+               console.log("DEBUG: Valid types after filtering:", validTypes);
+               setAllData(correctedData);
+               setAvailableDataTypes(validTypes);
+               // Set initial type based on filtered list
+               setDataType(validTypes.includes('Comercialização') ? 'Comercialização' : validTypes[0] || '');
+            } else if (Object.keys(actualData).length > 0) {
+               // Standard case: Use the actualData directly
+               const rawTypes = Object.keys(actualData); // Extract keys from the correct payload
+               const validTypes = rawTypes.filter(key => key !== 'data'); // Filter out 'data' key
+               console.log("DEBUG: Extracted types (keys) from actualData:", rawTypes);
+               console.log("DEBUG: Valid types after filtering:", validTypes);
+               setAllData(actualData);
+               setAvailableDataTypes(validTypes);
+               // Set initial type based on filtered list
+               setDataType(validTypes.includes('Comercialização') ? 'Comercialização' : validTypes[0] || '');
+            } else {
+               // The identified data payload is empty
+               setError(`Nenhum dado encontrado para o ano ${year}.`);
+               setAllData({}); // Keep as empty object if payload was valid but empty
+               setAvailableDataTypes([]);
+               setDataType(''); // Reset data type
+            }
+          } else {
+            // Handle cases where neither response.data.data nor response.data was a valid payload
+            console.error('Não foi possível identificar uma estrutura de dados válida na resposta da API:', response.data);
+            setError(`Estrutura de dados inválida ou inesperada recebida da API para o ano ${year}.`);
+            setAllData(null);
             setAvailableDataTypes([]);
           }
         } else {
           // Handle cases where response.data itself is invalid or missing
           console.error('response.data da API não é um objeto válido ou não existe:', response?.data);
           setError(`Resposta inválida da API para o ano ${year}.`);
-          setAllData({});
+          setAllData(null);
           setAvailableDataTypes([]);
         }
       } catch (err) {
-        console.error('Erro ao buscar dados:', err);
-        let errorMessage = 'Ocorreu um erro inesperado ao buscar os dados.';
+        console.error("Erro ao buscar dados:", err);
+        let errorMessage = "Ocorreu um erro inesperado ao buscar os dados.";
         if (err instanceof Error) {
-            errorMessage = err.message.includes("Resposta da API sem dados") 
-                           ? `Nenhum dado retornado pela API para o ano ${year}. Verifique o backend.` 
-                           : err.message;
+            if (err.message.toLowerCase().includes("timeout")) {
+                errorMessage = `A requisição para o backend demorou muito (${err.message}). Verifique se o servidor backend está respondendo ou se o processo de scraping está muito lento.`;
+            } else if (err.message.includes("Resposta da API sem dados")) {
+                errorMessage = `Nenhum dado retornado pela API para o ano ${year}. Verifique o backend.`;
+            } else {
+                errorMessage = `Erro ao buscar dados: ${err.message}`; // More generic fetch error
+            }
         }
         setError(errorMessage);
-        setAllData({});
+        setAllData(null); // Set to null instead of {}
         setAvailableDataTypes([]);
+        setDataType(""); // Reset data type as well
+        setProcessedTables([]); // Clear processed tables too
       } finally {
         setLoading(false);
       }
@@ -128,17 +171,34 @@ export default function HomePage() {
 
   // --- EFEITO FINAL: Lida com Item/SubItem, Total Geral (existente ou calculado) ---
   useEffect(() => {
-    if (!allData || typeof allData !== 'object' || Array.isArray(allData) || !dataType || !allData[dataType]) {
-      setProcessedTables([]);
+    // Clear previous tables and errors related to processing
+    setProcessedTables([]);
+    // Do not clear the main fetch error here, only processing errors
+
+    // Check if we have valid data and a selected data type
+    if (!allData || typeof allData !== 'object' || Array.isArray(allData) || !dataType) {
+      setProcessedTables([]); // Ensure it's cleared if basic conditions fail
+      // console.log("DEBUG: Processing skipped - no valid allData or dataType.");
       return;
     }
 
     try {
       const tablesContainer = allData[dataType];
       const newProcessedTables: ProcessedTable[] = [];
-      // Define tipos que precisam de total calculado
-      const typesForCalculatedTotal = ["Produção", "Comercialização", "Processamento"]; 
 
+      // Explicitly check if the data for the selected type exists and is an array
+      if (!tablesContainer || !Array.isArray(tablesContainer)) {
+        console.warn(`Dados para o tipo '${dataType}' não encontrados ou não são um array em allData. Valor:`, tablesContainer);
+        // Set error specific to processing this data type, keeping fetch errors if they exist
+        // setError(prevError => prevError || `Nenhuma tabela encontrada ou dados inválidos para o tipo '${dataType}' no ano ${year}.`);
+        setProcessedTables([]); // Ensure tables are empty
+        return; // Stop processing if the container is invalid
+      }
+
+      // Define tipos que precisam de total calculado
+      const typesForCalculatedTotal = ["Produção", "Comercialização", "Processamento"];
+
+      // This check is now slightly redundant due to the one above, but harmless
       if (Array.isArray(tablesContainer)) {
         tablesContainer.forEach((tableObject, index) => {
           if (typeof tableObject === 'object' && tableObject !== null) {
@@ -235,6 +295,10 @@ export default function HomePage() {
           }
         });
       } else {
+        // ADDED DEBUG LOG:
+        console.log("DEBUG: Processing dataType:", dataType, " | tablesContainer value:", tablesContainer);
+        // ADDED TYPE CHECK LOG:
+        console.log("DEBUG: Type of tablesContainer:", typeof tablesContainer);
         console.warn(`Conteúdo de '${dataType}' não é um array como esperado.`);
       }
 
