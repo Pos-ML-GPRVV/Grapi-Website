@@ -13,9 +13,17 @@ interface FetchDataSuccessResponse extends AxiosResponse {
 
 export const fetchData = async (year: string): Promise<FetchDataSuccessResponse> => {
   try {
+    const apiKey = process.env.NEXT_PUBLIC_API_KEY;
+    if (!apiKey) {
+      console.error("Chave de API não encontrada nas variáveis de ambiente (NEXT_PUBLIC_API_KEY).");
+      throw new Error("Configuração de API Key ausente no frontend.");
+    }
     const response: AxiosResponse = await axios.get(`https://grapi-backend.onrender.com/extractor?year=${year}`, {
-      timeout: 30000, // Tempo limite de 15 segundos
-      validateStatus: (status) => status === 200, // Somente status 200 é considerado sucesso
+      headers: { // Adicionar esta seção de headers
+        'x-api-key': apiKey
+      },
+      timeout: 30000, 
+      validateStatus: (status ) => status === 200,
     });
 
     // --- CORREÇÃO ---
